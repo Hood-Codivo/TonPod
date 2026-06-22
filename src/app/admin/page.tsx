@@ -86,7 +86,11 @@ export default function AdminPage() {
         <Field label="Fee recipient (pubkey)" value={lpFeeRecipient} onChange={setLpFeeRecipient} />
         <Field label="Platform fee (bps)" value={platformFeeBps} onChange={setPlatformFeeBps} />
         <Field label="Migration fee (bps)" value={migrationFeeBps} onChange={setMigrationFeeBps} />
-        <Field label="Migration market cap (scaled, 1e9 = 1 quote unit per token)" value={migrationMarketCap} onChange={setMigrationMarketCap} />
+        <Field
+          label="Migration market cap (raw quote-token base units, e.g. lamports if quote mint is wSOL)"
+          value={migrationMarketCap}
+          onChange={setMigrationMarketCap}
+        />
         <button onClick={initGlobalConfig} className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
           Initialize
         </button>

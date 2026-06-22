@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
@@ -23,7 +23,7 @@ type Pool = {
 
 export default function PoolDetailPage() {
   const params = useParams<{ pool: string }>();
-  const poolPk = new PublicKey(params.pool);
+  const poolPk = useMemo(() => new PublicKey(params.pool), [params.pool]);
   const { connection } = useConnection();
   const { connected, publicKey } = useWallet();
   const program = useAmmProgram();

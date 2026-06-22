@@ -1,6 +1,8 @@
 import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
+  TokenAccountNotFoundError,
   createAssociatedTokenAccountInstruction,
+  getAccount,
   getAssociatedTokenAddressSync,
   getMint,
 } from "@solana/spl-token";
@@ -38,4 +40,14 @@ export function toRawAmount(value: string, decimals: number): bigint {
   const fracPadded = (frac + "0".repeat(decimals)).slice(0, decimals);
   const wholeDigits = whole === "" ? "0" : whole;
   return BigInt(wholeDigits + fracPadded || "0");
+}
+
+export async function getTokenBalance(connection: Connection, address: PublicKey): Promise<bigint> {
+  try {
+    const account = await getAccount(connection, address);
+    return account.amount;
+  } catch (err) {
+    if (err instanceof TokenAccountNotFoundError) return BigInt(0);
+    throw err;
+  }
 }

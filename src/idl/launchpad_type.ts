@@ -433,12 +433,7 @@ export type Launchpad = {
           "address": "SysvarRent111111111111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "tradeFeeBps",
-          "type": "u16"
-        }
-      ]
+      "args": []
     },
     {
       "name": "pauseLaunch",

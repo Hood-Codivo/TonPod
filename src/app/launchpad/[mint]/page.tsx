@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { NATIVE_MINT, createCloseAccountInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram, useLaunchpadProgram } from "@/lib/programs";
 import { getAmmConfigPda, getCurvePda, getGlobalConfigPda, getPoolPda } from "@/lib/pda";
-import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount } from "@/lib/token";
+import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
 
 type Curve = {
   creator: PublicKey;
@@ -28,7 +29,7 @@ type Curve = {
 
 export default function CurveDetailPage() {
   const params = useParams<{ mint: string }>();
-  const mintPk = new PublicKey(params.mint);
+  const mintPk = useMemo(() => new PublicKey(params.mint), [params.mint]);
   const { connection } = useConnection();
   const { connected, publicKey } = useWallet();
   const program = useLaunchpadProgram();
@@ -43,7 +44,6 @@ export default function CurveDetailPage() {
   const [minTokenOut, setMinTokenOut] = useState("0");
   const [tokenAmountIn, setTokenAmountIn] = useState("");
   const [minQuoteOut, setMinQuoteOut] = useState("0");
-  const [tradeFeeBps, setTradeFeeBps] = useState("30");
   const [status, setStatus] = useState<string | null>(null);
   const [migrateStatus, setMigrateStatus] = useState<string | null>(null);
   const [finalizeStatus, setFinalizeStatus] = useState<string | null>(null);
@@ -82,8 +82,38 @@ export default function CurveDetailPage() {
         await Promise.all([
           ensureAtaIx(connection, publicKey, curve.mint, publicKey),
           ensureAtaIx(connection, publicKey, curve.quoteMint, publicKey),
+          ensureAtaIx(connection, publicKey, curve.quoteMint, feeRecipient),
         ])
       ).filter((ix): ix is NonNullable<typeof ix> => ix !== null);
+
+      // Quote asset is wSOL: top up the buyer's wSOL ATA from their native
+      // SOL balance in this same transaction, pump.fun-style, instead of
+      // requiring a separate manual wrap step.
+      let wrapped = false;
+      if (curve.quoteMint.equals(NATIVE_MINT)) {
+        const desired = BigInt(quoteAmountIn || "0");
+        const balance = await getTokenBalance(connection, buyerQuoteAccount);
+        if (balance < desired) {
+          const shortfall = desired - balance;
+          preIx.push(
+            SystemProgram.transfer({
+              fromPubkey: publicKey,
+              toPubkey: buyerQuoteAccount,
+              lamports: Number(shortfall),
+            }),
+            createSyncNativeInstruction(buyerQuoteAccount)
+          );
+          wrapped = true;
+        }
+      }
+
+      // `buy` debits exactly `quoteAmountIn` from buyerQuoteAccount, so when
+      // we topped it up to exactly that amount, its balance lands back at 0
+      // afterward — safe to close and reclaim the rent as native SOL, so the
+      // wallet shows a plain SOL change instead of a lingering wSOL line.
+      const postIx = wrapped
+        ? [createCloseAccountInstruction(buyerQuoteAccount, publicKey, publicKey)]
+        : [];
 
       const sig = await program.methods
         .buy(new BN(quoteAmountIn), new BN(minTokenOut))
@@ -96,6 +126,7 @@ export default function CurveDetailPage() {
           feeRecipientQuoteAccount,
         })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setStatus(`Done: ${sig}`);
       load();
@@ -115,6 +146,7 @@ export default function CurveDetailPage() {
         await Promise.all([
           ensureAtaIx(connection, publicKey, curve.mint, publicKey),
           ensureAtaIx(connection, publicKey, curve.quoteMint, publicKey),
+          ensureAtaIx(connection, publicKey, curve.quoteMint, feeRecipient),
         ])
       ).filter((ix): ix is NonNullable<typeof ix> => ix !== null);
 
@@ -149,7 +181,7 @@ export default function CurveDetailPage() {
       const ammLpMint = Keypair.generate();
 
       const sig = await program.methods
-        .migrateToAmm(Number(tradeFeeBps))
+        .migrateToAmm()
         .accounts({
           migrationPayer: publicKey,
           config,
@@ -256,7 +288,6 @@ export default function CurveDetailPage() {
           </p>
           {!curve.migrating && (
             <>
-              <Field label="AMM trade fee (bps)" value={tradeFeeBps} onChange={setTradeFeeBps} />
               <button onClick={handleMigrate} className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
                 1. Start migration
               </button>
