@@ -7,6 +7,8 @@ import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram } from "@/lib/programs";
 import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount } from "@/lib/token";
+import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
+import { PriceChart } from "@/components/PriceChart";
 
 type Pool = {
   mintA: PublicKey;
@@ -31,6 +33,8 @@ export default function PoolDetailPage() {
   const [pool, setPool] = useState<Pool | null>(null);
   const [decimals, setDecimals] = useState({ a: 0, b: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [pricePoints, setPricePoints] = useState<PricePoint[]>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   const [initAmountA, setInitAmountA] = useState("");
   const [initAmountB, setInitAmountB] = useState("");
@@ -63,6 +67,11 @@ export default function PoolDetailPage() {
         fetchDecimals(connection, account.mintB as PublicKey),
       ]);
       setDecimals({ a: decA, b: decB });
+
+      setPriceLoading(true);
+      fetchPriceHistory(connection, program, poolPk, "SwapEvent", decA, decB)
+        .then(setPricePoints)
+        .finally(() => setPriceLoading(false));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -193,6 +202,11 @@ export default function PoolDetailPage() {
         <Stat label="Reserve B" value={formatTokenAmount(BigInt(pool.reserveB.toString()), decimals.b)} />
         <Stat label="Trade fee" value={`${pool.tradeFeeBps} bps`} />
         <Stat label="Locked" value={pool.locked ? "Yes" : "No"} />
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+        <h2 className="mb-3 text-lg font-medium">Price (A in B)</h2>
+        <PriceChart points={pricePoints} loading={priceLoading} />
       </div>
 
       {!connected && <p className="text-sm text-zinc-500">Connect a wallet to interact with this pool.</p>}

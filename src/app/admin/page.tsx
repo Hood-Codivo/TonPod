@@ -5,6 +5,7 @@ import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram, useLaunchpadProgram } from "@/lib/programs";
+import { ADMIN_PUBKEY } from "@/lib/constants";
 
 export default function AdminPage() {
   const { connected, publicKey } = useWallet();
@@ -62,6 +63,14 @@ export default function AdminPage() {
 
   if (!connected) {
     return <p className="text-zinc-600 dark:text-zinc-400">Connect a wallet to manage program configuration.</p>;
+  }
+
+  if (!publicKey?.equals(ADMIN_PUBKEY)) {
+    return (
+      <p className="text-zinc-600 dark:text-zinc-400">
+        This page is restricted to the designated admin wallet. Connect that wallet to continue.
+      </p>
+    );
   }
 
   return (

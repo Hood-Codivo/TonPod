@@ -9,6 +9,8 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram, useLaunchpadProgram } from "@/lib/programs";
 import { getAmmConfigPda, getCurvePda, getGlobalConfigPda, getPoolPda } from "@/lib/pda";
 import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
+import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
+import { PriceChart } from "@/components/PriceChart";
 
 type Curve = {
   creator: PublicKey;
@@ -39,6 +41,8 @@ export default function CurveDetailPage() {
   const [feeRecipient, setFeeRecipient] = useState<PublicKey | null>(null);
   const [decimals, setDecimals] = useState({ token: 0, quote: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [pricePoints, setPricePoints] = useState<PricePoint[]>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   const [quoteAmountIn, setQuoteAmountIn] = useState("");
   const [minTokenOut, setMinTokenOut] = useState("0");
@@ -62,6 +66,11 @@ export default function CurveDetailPage() {
         fetchDecimals(connection, account.quoteMint as PublicKey),
       ]);
       setDecimals({ token: tokenDecimals, quote: quoteDecimals });
+
+      setPriceLoading(true);
+      fetchPriceHistory(connection, program, curvePda, "TradeEvent", tokenDecimals, quoteDecimals)
+        .then(setPricePoints)
+        .finally(() => setPriceLoading(false));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -252,6 +261,11 @@ export default function CurveDetailPage() {
         <Stat label="Real quote reserves" value={formatTokenAmount(BigInt(curve.realQuoteReserves.toString()), decimals.quote)} />
         <Stat label="Tokens sold" value={formatTokenAmount(BigInt(curve.tokensSold.toString()), decimals.token)} />
         <Stat label="Total supply" value={formatTokenAmount(BigInt(curve.totalSupply.toString()), decimals.token)} />
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+        <h2 className="mb-3 text-lg font-medium">Price</h2>
+        <PriceChart points={pricePoints} loading={priceLoading} />
       </div>
 
       {!connected && <p className="text-sm text-zinc-500">Connect a wallet to trade.</p>}

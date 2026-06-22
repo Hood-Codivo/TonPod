@@ -14,3 +14,6 @@ export const CURVE_SEED = Buffer.from("curve");
 export const POOL_SEED = Buffer.from("pool");
 
 export const BPS_DENOMINATOR = 10_000;
+
+// Must match ADMIN_PUBKEY hardcoded in both on-chain programs.
+export const ADMIN_PUBKEY = new PublicKey("7wmRRK7KypcW2anQKimiECM3adRRUpw9Pi2myDmV9DME");

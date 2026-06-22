@@ -497,6 +497,11 @@
       "code": 6004,
       "name": "MathOverflow",
       "msg": "Math overflow"
+    },
+    {
+      "code": 6005,
+      "name": "Unauthorized",
+      "msg": "Only the designated admin wallet can perform this action"
     }
   ],
   "types": [

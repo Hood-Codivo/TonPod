@@ -503,6 +503,11 @@ export type Ammverse = {
       "code": 6004,
       "name": "mathOverflow",
       "msg": "Math overflow"
+    },
+    {
+      "code": 6005,
+      "name": "unauthorized",
+      "msg": "Only the designated admin wallet can perform this action"
     }
   ],
   "types": [
