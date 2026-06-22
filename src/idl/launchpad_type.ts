@@ -601,6 +601,21 @@ export type Launchpad = {
       ]
     }
   ],
+  "events": [
+    {
+      "name": "tradeEvent",
+      "discriminator": [
+        189,
+        219,
+        127,
+        211,
+        78,
+        230,
+        97,
+        238
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -843,6 +858,38 @@ export type Launchpad = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tradeEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "curve",
+            "type": "pubkey"
+          },
+          {
+            "name": "isBuy",
+            "type": "bool"
+          },
+          {
+            "name": "quoteAmount",
+            "type": "u64"
+          },
+          {
+            "name": "tokenAmount",
+            "type": "u64"
+          },
+          {
+            "name": "priceScaled",
+            "type": "u128"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

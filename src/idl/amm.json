@@ -472,6 +472,21 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "SwapEvent",
+      "discriminator": [
+        64,
+        198,
+        205,
+        232,
+        38,
+        8,
+        113,
+        226
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -585,6 +600,38 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "a_to_b",
+            "type": "bool"
+          },
+          {
+            "name": "amount_in",
+            "type": "u64"
+          },
+          {
+            "name": "amount_out",
+            "type": "u64"
+          },
+          {
+            "name": "price_scaled",
+            "type": "u128"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

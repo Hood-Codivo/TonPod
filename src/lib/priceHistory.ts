@@ -18,7 +18,7 @@ export async function fetchPriceHistory<IDL extends Idl>(
   connection: Connection,
   program: Program<IDL>,
   account: PublicKey,
-  eventName: "TradeEvent" | "SwapEvent",
+  eventName: "tradeEvent" | "swapEvent",
   tokenDecimals: number,
   quoteDecimals: number,
   limit = 100
@@ -44,7 +44,7 @@ export async function fetchPriceHistory<IDL extends Idl>(
       const price = (Number(priceScaled) / PRICE_SCALE) * decimalsAdjust;
       const time = Number((data.timestamp as { toString(): string }).toString());
       const side: "buy" | "sell" =
-        eventName === "TradeEvent" ? (data.isBuy ? "buy" : "sell") : (data.aToB ? "sell" : "buy");
+        eventName === "tradeEvent" ? (data.isBuy ? "buy" : "sell") : (data.aToB ? "sell" : "buy");
       points.push({ time, price, side });
     }
   }

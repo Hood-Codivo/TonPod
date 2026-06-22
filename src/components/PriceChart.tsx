@@ -33,7 +33,10 @@ export function PriceChart({
   return (
     <ResponsiveContainer width="100%" height={240}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-800" />
+        <CartesianGrid
+          strokeDasharray="3 3"
+          className="stroke-zinc-200 dark:stroke-zinc-800"
+        />
         <XAxis dataKey="label" tick={{ fontSize: 10 }} minTickGap={30} />
         <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} width={70} />
         <Tooltip
@@ -49,11 +52,25 @@ export function PriceChart({
           stroke="#3b82f6"
           strokeWidth={1.5}
           isAnimationActive={false}
-          dot={(props: { cx?: number; cy?: number; payload?: PricePoint & { label: string } }) => {
+          dot={(props: {
+            cx?: number;
+            cy?: number;
+            payload?: PricePoint & { label: string };
+          }) => {
             const { cx, cy, payload } = props;
-            if (cx === undefined || cy === undefined || !payload) return <g key={`${cx}-${cy}`} />;
+            if (cx === undefined || cy === undefined || !payload)
+              return <g key={`${cx}-${cy}`} />;
             const color = payload.side === "buy" ? "#22c55e" : "#ef4444";
-            return <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={3} fill={color} stroke={color} />;
+            return (
+              <circle
+                key={`${cx}-${cy}`}
+                cx={cx}
+                cy={cy}
+                r={3}
+                fill={color}
+                stroke={color}
+              />
+            );
           }}
         />
       </LineChart>

@@ -69,8 +69,9 @@ export default function PoolDetailPage() {
       setDecimals({ a: decA, b: decB });
 
       setPriceLoading(true);
-      fetchPriceHistory(connection, program, poolPk, "SwapEvent", decA, decB)
+      fetchPriceHistory(connection, program, poolPk, "swapEvent", decA, decB)
         .then(setPricePoints)
+        .catch((err) => console.error("price history fetch failed", err))
         .finally(() => setPriceLoading(false));
     } catch (err) {
       setError((err as Error).message);

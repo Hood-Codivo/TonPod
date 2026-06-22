@@ -595,6 +595,21 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "TradeEvent",
+      "discriminator": [
+        189,
+        219,
+        127,
+        211,
+        78,
+        230,
+        97,
+        238
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -837,6 +852,38 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TradeEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "curve",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_buy",
+            "type": "bool"
+          },
+          {
+            "name": "quote_amount",
+            "type": "u64"
+          },
+          {
+            "name": "token_amount",
+            "type": "u64"
+          },
+          {
+            "name": "price_scaled",
+            "type": "u128"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

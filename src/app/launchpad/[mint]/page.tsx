@@ -8,7 +8,7 @@ import { NATIVE_MINT, createCloseAccountInstruction, createSyncNativeInstruction
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram, useLaunchpadProgram } from "@/lib/programs";
 import { getAmmConfigPda, getCurvePda, getGlobalConfigPda, getPoolPda } from "@/lib/pda";
-import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
+import { ata, ensureAtaIxBatch, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
 import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
 import { PriceChart } from "@/components/PriceChart";
 
@@ -68,8 +68,9 @@ export default function CurveDetailPage() {
       setDecimals({ token: tokenDecimals, quote: quoteDecimals });
 
       setPriceLoading(true);
-      fetchPriceHistory(connection, program, curvePda, "TradeEvent", tokenDecimals, quoteDecimals)
+      fetchPriceHistory(connection, program, curvePda, "tradeEvent", tokenDecimals, quoteDecimals)
         .then(setPricePoints)
+        .catch((err) => console.error("price history fetch failed", err))
         .finally(() => setPriceLoading(false));
     } catch (err) {
       setError((err as Error).message);
@@ -87,13 +88,11 @@ export default function CurveDetailPage() {
       const buyerTokenAccount = ata(curve.mint, publicKey);
       const buyerQuoteAccount = ata(curve.quoteMint, publicKey);
       const feeRecipientQuoteAccount = ata(curve.quoteMint, feeRecipient);
-      const preIx = (
-        await Promise.all([
-          ensureAtaIx(connection, publicKey, curve.mint, publicKey),
-          ensureAtaIx(connection, publicKey, curve.quoteMint, publicKey),
-          ensureAtaIx(connection, publicKey, curve.quoteMint, feeRecipient),
-        ])
-      ).filter((ix): ix is NonNullable<typeof ix> => ix !== null);
+      const preIx = await ensureAtaIxBatch(connection, publicKey, [
+        { mint: curve.mint, owner: publicKey },
+        { mint: curve.quoteMint, owner: publicKey },
+        { mint: curve.quoteMint, owner: feeRecipient },
+      ]);
 
       // Quote asset is wSOL: top up the buyer's wSOL ATA from their native
       // SOL balance in this same transaction, pump.fun-style, instead of
@@ -151,13 +150,11 @@ export default function CurveDetailPage() {
       const sellerTokenAccount = ata(curve.mint, publicKey);
       const sellerQuoteAccount = ata(curve.quoteMint, publicKey);
       const feeRecipientQuoteAccount = ata(curve.quoteMint, feeRecipient);
-      const preIx = (
-        await Promise.all([
-          ensureAtaIx(connection, publicKey, curve.mint, publicKey),
-          ensureAtaIx(connection, publicKey, curve.quoteMint, publicKey),
-          ensureAtaIx(connection, publicKey, curve.quoteMint, feeRecipient),
-        ])
-      ).filter((ix): ix is NonNullable<typeof ix> => ix !== null);
+      const preIx = await ensureAtaIxBatch(connection, publicKey, [
+        { mint: curve.mint, owner: publicKey },
+        { mint: curve.quoteMint, owner: publicKey },
+        { mint: curve.quoteMint, owner: feeRecipient },
+      ]);
 
       const sig = await program.methods
         .sell(new BN(tokenAmountIn), new BN(minQuoteOut))

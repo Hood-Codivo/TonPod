@@ -42,6 +42,26 @@ export function toRawAmount(value: string, decimals: number): bigint {
   return BigInt(wholeDigits + fracPadded || "0");
 }
 
+// Like ensureAtaIx, but for several (mint, owner) pairs at once, deduplicated
+// by the resulting ATA address. Without this, two different "roles" (e.g.
+// buyer and fee recipient) that happen to resolve to the same address would
+// each queue their own Create instruction, and the second one fails since
+// the first already created it.
+export async function ensureAtaIxBatch(
+  connection: Connection,
+  payer: PublicKey,
+  targets: { mint: PublicKey; owner: PublicKey }[]
+): Promise<TransactionInstruction[]> {
+  const unique = new Map<string, { mint: PublicKey; owner: PublicKey }>();
+  for (const target of targets) {
+    unique.set(ata(target.mint, target.owner).toBase58(), target);
+  }
+  const ixs = await Promise.all(
+    Array.from(unique.values()).map(({ mint, owner }) => ensureAtaIx(connection, payer, mint, owner))
+  );
+  return ixs.filter((ix): ix is NonNullable<typeof ix> => ix !== null);
+}
+
 export async function getTokenBalance(connection: Connection, address: PublicKey): Promise<bigint> {
   try {
     const account = await getAccount(connection, address);

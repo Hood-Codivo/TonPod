@@ -478,6 +478,21 @@ export type Ammverse = {
       ]
     }
   ],
+  "events": [
+    {
+      "name": "swapEvent",
+      "discriminator": [
+        64,
+        198,
+        205,
+        232,
+        38,
+        8,
+        113,
+        226
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -591,6 +606,38 @@ export type Ammverse = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "swapEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "aToB",
+            "type": "bool"
+          },
+          {
+            "name": "amountIn",
+            "type": "u64"
+          },
+          {
+            "name": "amountOut",
+            "type": "u64"
+          },
+          {
+            "name": "priceScaled",
+            "type": "u128"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }
