@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { NATIVE_MINT, createCloseAccountInstruction, createSyncNativeInstruction } from "@solana/spl-token";
+import { NATIVE_MINT, createSyncNativeInstruction } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram, useLaunchpadProgram } from "@/lib/programs";
 import { getAmmConfigPda, getCurvePda, getGlobalConfigPda, getPoolPda } from "@/lib/pda";
-import { ata, ensureAtaIxBatch, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
+import { ata, closeIfNativeIx, ensureAtaIxBatch, fetchDecimals, formatTokenAmount, getTokenBalance } from "@/lib/token";
 import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
 import { PriceChart } from "@/components/PriceChart";
 
@@ -97,7 +97,6 @@ export default function CurveDetailPage() {
       // Quote asset is wSOL: top up the buyer's wSOL ATA from their native
       // SOL balance in this same transaction, pump.fun-style, instead of
       // requiring a separate manual wrap step.
-      let wrapped = false;
       if (curve.quoteMint.equals(NATIVE_MINT)) {
         const desired = BigInt(quoteAmountIn || "0");
         const balance = await getTokenBalance(connection, buyerQuoteAccount);
@@ -111,17 +110,14 @@ export default function CurveDetailPage() {
             }),
             createSyncNativeInstruction(buyerQuoteAccount)
           );
-          wrapped = true;
         }
       }
 
-      // `buy` debits exactly `quoteAmountIn` from buyerQuoteAccount, so when
-      // we topped it up to exactly that amount, its balance lands back at 0
-      // afterward — safe to close and reclaim the rent as native SOL, so the
-      // wallet shows a plain SOL change instead of a lingering wSOL line.
-      const postIx = wrapped
-        ? [createCloseAccountInstruction(buyerQuoteAccount, publicKey, publicKey)]
-        : [];
+      // Always close the wSOL account afterward (regardless of whether we
+      // had to top it up just now) so any balance — leftover dust included —
+      // unwraps back to native SOL. Users should only ever see SOL, never a
+      // lingering Wrapped SOL line.
+      const postIx = closeIfNativeIx(curve.quoteMint, buyerQuoteAccount, publicKey);
 
       const sig = await program.methods
         .buy(new BN(quoteAmountIn), new BN(minTokenOut))
@@ -156,6 +152,11 @@ export default function CurveDetailPage() {
         { mint: curve.quoteMint, owner: feeRecipient },
       ]);
 
+      // Selling pays proceeds into sellerQuoteAccount; close it afterward so
+      // those proceeds land back as native SOL instead of sitting there as
+      // a separate Wrapped SOL balance.
+      const postIx = closeIfNativeIx(curve.quoteMint, sellerQuoteAccount, publicKey);
+
       const sig = await program.methods
         .sell(new BN(tokenAmountIn), new BN(minQuoteOut))
         .accounts({
@@ -167,6 +168,7 @@ export default function CurveDetailPage() {
           feeRecipientQuoteAccount,
         })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setStatus(`Done: ${sig}`);
       load();

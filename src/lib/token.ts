@@ -1,7 +1,9 @@
 import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
+  NATIVE_MINT,
   TokenAccountNotFoundError,
   createAssociatedTokenAccountInstruction,
+  createCloseAccountInstruction,
   getAccount,
   getAssociatedTokenAddressSync,
   getMint,
@@ -28,6 +30,11 @@ export async function ensureAtaIx(
 export async function fetchDecimals(connection: Connection, mint: PublicKey) {
   const info = await getMint(connection, mint);
   return info.decimals;
+}
+
+export async function fetchMintSupply(connection: Connection, mint: PublicKey): Promise<bigint> {
+  const info = await getMint(connection, mint);
+  return info.supply;
 }
 
 export function formatTokenAmount(amount: bigint | number, decimals: number) {
@@ -60,6 +67,19 @@ export async function ensureAtaIxBatch(
     Array.from(unique.values()).map(({ mint, owner }) => ensureAtaIx(connection, payer, mint, owner))
   );
   return ixs.filter((ix): ix is NonNullable<typeof ix> => ix !== null);
+}
+
+// If `mint` is wrapped SOL, returns a closeAccount instruction that unwraps
+// whatever's left in `address` back into the owner's native SOL balance —
+// so users only ever end up holding plain SOL, never a leftover wSOL
+// account, regardless of which side of an action touched it.
+export function closeIfNativeIx(
+  mint: PublicKey,
+  address: PublicKey,
+  owner: PublicKey
+): TransactionInstruction[] {
+  if (!mint.equals(NATIVE_MINT)) return [];
+  return [createCloseAccountInstruction(address, owner, owner)];
 }
 
 export async function getTokenBalance(connection: Connection, address: PublicKey): Promise<bigint> {

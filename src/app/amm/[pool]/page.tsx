@@ -6,7 +6,7 @@ import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram } from "@/lib/programs";
-import { ata, ensureAtaIx, fetchDecimals, formatTokenAmount } from "@/lib/token";
+import { ata, closeIfNativeIx, ensureAtaIx, fetchDecimals, fetchMintSupply, formatTokenAmount, getTokenBalance } from "@/lib/token";
 import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
 import { PriceChart } from "@/components/PriceChart";
 
@@ -32,6 +32,8 @@ export default function PoolDetailPage() {
 
   const [pool, setPool] = useState<Pool | null>(null);
   const [decimals, setDecimals] = useState({ a: 0, b: 0 });
+  const [lpSupply, setLpSupply] = useState<bigint>(BigInt(0));
+  const [userLpBalance, setUserLpBalance] = useState<bigint>(BigInt(0));
   const [error, setError] = useState<string | null>(null);
   const [pricePoints, setPricePoints] = useState<PricePoint[]>([]);
   const [priceLoading, setPriceLoading] = useState(false);
@@ -45,11 +47,14 @@ export default function PoolDetailPage() {
   const [addAmountB, setAddAmountB] = useState("");
   const [addMinA, setAddMinA] = useState("0");
   const [addMinB, setAddMinB] = useState("0");
+  const [addLpEstimate, setAddLpEstimate] = useState<bigint>(BigInt(0));
   const [addStatus, setAddStatus] = useState<string | null>(null);
 
   const [removeLp, setRemoveLp] = useState("");
   const [removeMinA, setRemoveMinA] = useState("0");
   const [removeMinB, setRemoveMinB] = useState("0");
+  const [removeAEstimate, setRemoveAEstimate] = useState<bigint>(BigInt(0));
+  const [removeBEstimate, setRemoveBEstimate] = useState<bigint>(BigInt(0));
   const [removeStatus, setRemoveStatus] = useState<string | null>(null);
 
   const [swapDirection, setSwapDirection] = useState<"aToB" | "bToA">("aToB");
@@ -62,11 +67,17 @@ export default function PoolDetailPage() {
     try {
       const account = await program.account.pool.fetch(poolPk);
       setPool(account as unknown as Pool);
-      const [decA, decB] = await Promise.all([
+      const [decA, decB, supply] = await Promise.all([
         fetchDecimals(connection, account.mintA as PublicKey),
         fetchDecimals(connection, account.mintB as PublicKey),
+        fetchMintSupply(connection, account.lpMint as PublicKey),
       ]);
       setDecimals({ a: decA, b: decB });
+      setLpSupply(supply);
+      if (publicKey) {
+        const lpAccount = ata(account.lpMint as PublicKey, publicKey);
+        getTokenBalance(connection, lpAccount).then(setUserLpBalance);
+      }
 
       setPriceLoading(true);
       fetchPriceHistory(connection, program, poolPk, "swapEvent", decA, decB)
@@ -76,7 +87,7 @@ export default function PoolDetailPage() {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [program, connection, poolPk]);
+  }, [program, connection, poolPk, publicKey]);
 
   useEffect(() => {
     load();
@@ -107,16 +118,43 @@ export default function PoolDetailPage() {
       const accounts = baseAccounts();
       if (!accounts) return;
       const preIx = await ataPreIx([pool.mintA, pool.mintB, pool.lpMint]);
+      const postIx = [
+        ...closeIfNativeIx(pool.mintA, accounts.depositorTokenA, publicKey),
+        ...closeIfNativeIx(pool.mintB, accounts.depositorTokenB, publicKey),
+      ];
       const sig = await program.methods
         .initializePoolLiquidity(new BN(initAmountA), new BN(initAmountB), new BN(initMinLp))
         .accounts({ depositor: publicKey, ...accounts })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setInitStatus(`Done: ${sig}`);
       load();
     } catch (err) {
       setInitStatus(`Error: ${(err as Error).message}`);
     }
+  }
+
+  function handleAddAmountAChange(value: string) {
+    setAddAmountA(value);
+    if (!pool) return;
+    const reserveA = BigInt(pool.reserveA.toString());
+    const reserveB = BigInt(pool.reserveB.toString());
+    if (reserveA === BigInt(0) || lpSupply === BigInt(0)) return;
+
+    let amountA: bigint;
+    try {
+      amountA = BigInt(value || "0");
+    } catch {
+      return;
+    }
+
+    const amountB = (amountA * reserveB) / reserveA;
+    setAddAmountB(amountB.toString());
+
+    const lpFromA = (amountA * lpSupply) / reserveA;
+    const lpFromB = reserveB > BigInt(0) ? (amountB * lpSupply) / reserveB : BigInt(0);
+    setAddLpEstimate(lpFromA < lpFromB ? lpFromA : lpFromB);
   }
 
   async function handleAddLiquidity() {
@@ -126,16 +164,38 @@ export default function PoolDetailPage() {
       const accounts = baseAccounts();
       if (!accounts) return;
       const preIx = await ataPreIx([pool.mintA, pool.mintB, pool.lpMint]);
+      const postIx = [
+        ...closeIfNativeIx(pool.mintA, accounts.depositorTokenA, publicKey),
+        ...closeIfNativeIx(pool.mintB, accounts.depositorTokenB, publicKey),
+      ];
       const sig = await program.methods
         .addLiquidity(new BN(addAmountA), new BN(addAmountB), new BN(addMinA), new BN(addMinB))
         .accounts({ depositor: publicKey, ...accounts })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setAddStatus(`Done: ${sig}`);
       load();
     } catch (err) {
       setAddStatus(`Error: ${(err as Error).message}`);
     }
+  }
+
+  function handleRemoveLpChange(value: string) {
+    setRemoveLp(value);
+    if (!pool || lpSupply === BigInt(0)) return;
+
+    let lpAmount: bigint;
+    try {
+      lpAmount = BigInt(value || "0");
+    } catch {
+      return;
+    }
+
+    const reserveA = BigInt(pool.reserveA.toString());
+    const reserveB = BigInt(pool.reserveB.toString());
+    setRemoveAEstimate((lpAmount * reserveA) / lpSupply);
+    setRemoveBEstimate((lpAmount * reserveB) / lpSupply);
   }
 
   async function handleRemoveLiquidity() {
@@ -145,10 +205,15 @@ export default function PoolDetailPage() {
       const accounts = baseAccounts();
       if (!accounts) return;
       const preIx = await ataPreIx([pool.mintA, pool.mintB]);
+      const postIx = [
+        ...closeIfNativeIx(pool.mintA, accounts.depositorTokenA, publicKey),
+        ...closeIfNativeIx(pool.mintB, accounts.depositorTokenB, publicKey),
+      ];
       const sig = await program.methods
         .removeLiquidity(new BN(removeLp), new BN(removeMinA), new BN(removeMinB))
         .accounts({ depositor: publicKey, ...accounts })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setRemoveStatus(`Done: ${sig}`);
       load();
@@ -166,6 +231,10 @@ export default function PoolDetailPage() {
       const userInput = ata(inputMint, publicKey);
       const userOutput = ata(outputMint, publicKey);
       const preIx = await ataPreIx([inputMint, outputMint]);
+      const postIx = [
+        ...closeIfNativeIx(inputMint, userInput, publicKey),
+        ...closeIfNativeIx(outputMint, userOutput, publicKey),
+      ];
 
       const sig = await program.methods
         .swapExactIn(new BN(swapAmountIn), new BN(swapMinOut))
@@ -176,6 +245,7 @@ export default function PoolDetailPage() {
           userOutput,
         })
         .preInstructions(preIx)
+        .postInstructions(postIx)
         .rpc();
       setSwapStatus(`Done: ${sig}`);
       load();
@@ -203,6 +273,8 @@ export default function PoolDetailPage() {
         <Stat label="Reserve B" value={formatTokenAmount(BigInt(pool.reserveB.toString()), decimals.b)} />
         <Stat label="Trade fee" value={`${pool.tradeFeeBps} bps`} />
         <Stat label="Locked" value={pool.locked ? "Yes" : "No"} />
+        <Stat label="Total LP supply" value={formatTokenAmount(lpSupply, 9)} />
+        <Stat label="Your LP balance" value={formatTokenAmount(userLpBalance, 9)} />
       </div>
 
       <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
@@ -229,10 +301,19 @@ export default function PoolDetailPage() {
         <div className="grid gap-6 sm:grid-cols-2">
           <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
             <h2 className="text-lg font-medium">Add liquidity</h2>
-            <Field label="Amount A desired (raw)" value={addAmountA} onChange={setAddAmountA} />
+            <p className="text-xs text-zinc-500">
+              Amount B is auto-calculated from Amount A using the pool&apos;s current ratio.
+              Edit it manually if you want a different split.
+            </p>
+            <Field label="Amount A desired (raw)" value={addAmountA} onChange={handleAddAmountAChange} />
             <Field label="Amount B desired (raw)" value={addAmountB} onChange={setAddAmountB} />
             <Field label="Amount A min (raw)" value={addMinA} onChange={setAddMinA} />
             <Field label="Amount B min (raw)" value={addMinB} onChange={setAddMinB} />
+            {addAmountA && (
+              <p className="text-xs text-zinc-500">
+                Estimated LP tokens: {formatTokenAmount(addLpEstimate, 9)}
+              </p>
+            )}
             <button onClick={handleAddLiquidity} className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
               Add liquidity
             </button>
@@ -241,9 +322,15 @@ export default function PoolDetailPage() {
 
           <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
             <h2 className="text-lg font-medium">Remove liquidity</h2>
-            <Field label="LP amount (raw)" value={removeLp} onChange={setRemoveLp} />
+            <Field label="LP amount (raw)" value={removeLp} onChange={handleRemoveLpChange} />
             <Field label="Amount A min (raw)" value={removeMinA} onChange={setRemoveMinA} />
             <Field label="Amount B min (raw)" value={removeMinB} onChange={setRemoveMinB} />
+            {removeLp && (
+              <p className="text-xs text-zinc-500">
+                Estimated to receive: {formatTokenAmount(removeAEstimate, decimals.a)} (A),{" "}
+                {formatTokenAmount(removeBEstimate, decimals.b)} (B)
+              </p>
+            )}
             <button onClick={handleRemoveLiquidity} className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
               Remove liquidity
             </button>
