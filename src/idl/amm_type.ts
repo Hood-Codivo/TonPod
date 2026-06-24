@@ -408,6 +408,28 @@ export type Ammverse = {
           "signer": true
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  109,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "pool",
           "writable": true
         },
@@ -417,6 +439,10 @@ export type Ammverse = {
         },
         {
           "name": "userOutput",
+          "writable": true
+        },
+        {
+          "name": "feeRecipientToken",
           "writable": true
         },
         {
@@ -523,6 +549,11 @@ export type Ammverse = {
       "code": 6005,
       "name": "unauthorized",
       "msg": "Only the designated admin wallet can perform this action"
+    },
+    {
+      "code": 6006,
+      "name": "invalidFeeRecipient",
+      "msg": "Fee recipient token account does not belong to the configured fee recipient"
     }
   ],
   "types": [

@@ -6,7 +6,8 @@ import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram } from "@/lib/programs";
-import { ata, closeIfNativeIx, ensureAtaIx, fetchDecimals, fetchMintSupply, formatTokenAmount, getTokenBalance } from "@/lib/token";
+import { getAmmConfigPda } from "@/lib/pda";
+import { ata, closeIfNativeIx, ensureAtaIx, ensureAtaIxBatch, fetchDecimals, fetchMintSupply, formatTokenAmount, getTokenBalance } from "@/lib/token";
 import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
 import { PriceChart } from "@/components/PriceChart";
 
@@ -34,6 +35,7 @@ export default function PoolDetailPage() {
   const [decimals, setDecimals] = useState({ a: 0, b: 0 });
   const [lpSupply, setLpSupply] = useState<bigint>(BigInt(0));
   const [userLpBalance, setUserLpBalance] = useState<bigint>(BigInt(0));
+  const [feeRecipient, setFeeRecipient] = useState<PublicKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pricePoints, setPricePoints] = useState<PricePoint[]>([]);
   const [priceLoading, setPriceLoading] = useState(false);
@@ -67,6 +69,9 @@ export default function PoolDetailPage() {
     try {
       const account = await program.account.pool.fetch(poolPk);
       setPool(account as unknown as Pool);
+      const [configPda] = getAmmConfigPda();
+      const config = await program.account.ammConfig.fetch(configPda);
+      setFeeRecipient(config.feeRecipient as PublicKey);
       const [decA, decB, supply] = await Promise.all([
         fetchDecimals(connection, account.mintA as PublicKey),
         fetchDecimals(connection, account.mintB as PublicKey),
@@ -223,14 +228,18 @@ export default function PoolDetailPage() {
   }
 
   async function handleSwap() {
-    if (!program || !publicKey || !pool) return;
+    if (!program || !publicKey || !pool || !feeRecipient) return;
     setSwapStatus("Submitting...");
     try {
       const inputMint = swapDirection === "aToB" ? pool.mintA : pool.mintB;
       const outputMint = swapDirection === "aToB" ? pool.mintB : pool.mintA;
       const userInput = ata(inputMint, publicKey);
       const userOutput = ata(outputMint, publicKey);
-      const preIx = await ataPreIx([inputMint, outputMint]);
+      const feeRecipientToken = ata(inputMint, feeRecipient);
+      const preIx = [
+        ...(await ataPreIx([inputMint, outputMint])),
+        ...(await ensureAtaIxBatch(connection, publicKey, [{ mint: inputMint, owner: feeRecipient }])),
+      ];
       const postIx = [
         ...closeIfNativeIx(inputMint, userInput, publicKey),
         ...closeIfNativeIx(outputMint, userOutput, publicKey),
@@ -243,6 +252,7 @@ export default function PoolDetailPage() {
           pool: poolPk,
           userInput,
           userOutput,
+          feeRecipientToken,
         })
         .preInstructions(preIx)
         .postInstructions(postIx)
