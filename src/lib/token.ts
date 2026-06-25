@@ -1,9 +1,10 @@
-import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { Connection, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import {
   NATIVE_MINT,
   TokenAccountNotFoundError,
   createAssociatedTokenAccountInstruction,
   createCloseAccountInstruction,
+  createSyncNativeInstruction,
   getAccount,
   getAssociatedTokenAddressSync,
   getMint,
@@ -80,6 +81,27 @@ export function closeIfNativeIx(
 ): TransactionInstruction[] {
   if (!mint.equals(NATIVE_MINT)) return [];
   return [createCloseAccountInstruction(address, owner, owner)];
+}
+
+// If `mint` is wrapped SOL and `address` doesn't already hold at least
+// `desired`, returns instructions that top it up from the owner's native
+// SOL balance — the same auto-wrap bundling used for Buy, generalized for
+// any action that needs a wSOL ATA pre-funded before it runs.
+export async function wrapShortfallIx(
+  connection: Connection,
+  owner: PublicKey,
+  mint: PublicKey,
+  address: PublicKey,
+  desired: bigint
+): Promise<TransactionInstruction[]> {
+  if (!mint.equals(NATIVE_MINT) || desired <= BigInt(0)) return [];
+  const balance = await getTokenBalance(connection, address);
+  if (balance >= desired) return [];
+  const shortfall = desired - balance;
+  return [
+    SystemProgram.transfer({ fromPubkey: owner, toPubkey: address, lamports: Number(shortfall) }),
+    createSyncNativeInstruction(address),
+  ];
 }
 
 export async function getTokenBalance(connection: Connection, address: PublicKey): Promise<bigint> {

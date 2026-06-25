@@ -7,7 +7,7 @@ import { PublicKey } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useAmmProgram } from "@/lib/programs";
 import { getAmmConfigPda } from "@/lib/pda";
-import { ata, closeIfNativeIx, ensureAtaIx, ensureAtaIxBatch, fetchDecimals, fetchMintSupply, formatTokenAmount, getTokenBalance } from "@/lib/token";
+import { ata, closeIfNativeIx, ensureAtaIx, ensureAtaIxBatch, fetchDecimals, fetchMintSupply, formatTokenAmount, getTokenBalance, wrapShortfallIx } from "@/lib/token";
 import { fetchPriceHistory, type PricePoint } from "@/lib/priceHistory";
 import { PriceChart } from "@/components/PriceChart";
 
@@ -122,7 +122,11 @@ export default function PoolDetailPage() {
     try {
       const accounts = baseAccounts();
       if (!accounts) return;
-      const preIx = await ataPreIx([pool.mintA, pool.mintB, pool.lpMint]);
+      const preIx = [
+        ...(await ataPreIx([pool.mintA, pool.mintB, pool.lpMint])),
+        ...(await wrapShortfallIx(connection, publicKey, pool.mintA, accounts.depositorTokenA, BigInt(initAmountA || "0"))),
+        ...(await wrapShortfallIx(connection, publicKey, pool.mintB, accounts.depositorTokenB, BigInt(initAmountB || "0"))),
+      ];
       const postIx = [
         ...closeIfNativeIx(pool.mintA, accounts.depositorTokenA, publicKey),
         ...closeIfNativeIx(pool.mintB, accounts.depositorTokenB, publicKey),
@@ -168,7 +172,11 @@ export default function PoolDetailPage() {
     try {
       const accounts = baseAccounts();
       if (!accounts) return;
-      const preIx = await ataPreIx([pool.mintA, pool.mintB, pool.lpMint]);
+      const preIx = [
+        ...(await ataPreIx([pool.mintA, pool.mintB, pool.lpMint])),
+        ...(await wrapShortfallIx(connection, publicKey, pool.mintA, accounts.depositorTokenA, BigInt(addAmountA || "0"))),
+        ...(await wrapShortfallIx(connection, publicKey, pool.mintB, accounts.depositorTokenB, BigInt(addAmountB || "0"))),
+      ];
       const postIx = [
         ...closeIfNativeIx(pool.mintA, accounts.depositorTokenA, publicKey),
         ...closeIfNativeIx(pool.mintB, accounts.depositorTokenB, publicKey),
